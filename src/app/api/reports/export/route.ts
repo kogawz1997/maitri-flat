@@ -31,8 +31,9 @@ export async function GET(request: Request) {
   ]);
 
   const csv = [headers, ...rows].map(row =>
-    row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
-  ).join('\n');
+    row.map((v: string | number | null | undefined) =>
+  `"${String(v ?? '').replace(/"/g, '""')}"`
+    ).join(',');
 
   return new Response('\uFEFF' + csv, {
     headers: {
