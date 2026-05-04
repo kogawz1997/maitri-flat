@@ -14,35 +14,58 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const limited = rateLimit(request, 'payments.charge', 20, 60_000);
-  if (limited) return limited;
-  const missingGateway = requireProductionSecret('OMISE_SECRET_KEY');
-  if (missingGateway) return missingGateway;
-
-  const parsed = await parseJson(request, schema);
-  if (parsed.error) return parsed.error;
-  const { reservationId, amount, method, description, cardToken } = parsed.data;
-
-  const ctx = await assertReservationAccess(reservationId);
-  if (ctx.error || !ctx.reservation) return ctx.error;
-  const supabase = ctx.supabase;
-  const reservation = ctx.reservation;
-
-  const balance = Math.max(0, Number(reservation.total_amount) - Number(reservation.paid_amount || 0));
-  if (amount > balance && balance > 0) {
-    return NextResponse.json({ error: 'Amount exceeds reservation balance', balance }, { status: 400 });
-  }
-
-  if (method === 'credit_card' && !cardToken) {
-    return NextResponse.json({ error: 'cardToken is required for credit card payments' }, { status: 400 });
-  }
-
-  const adapter = getPaymentAdapter('omise');
-
   try {
+    const limited = rateLimit(request, 'payments.charge', 20, 60_000);
+    if (limited) return limited;
+
+    const missingGateway = requireProductionSecret('OMISE_SECRET_KEY');
+    if (missingGateway) return missingGateway;
+
+    const parsed = await parseJson(request, schema);
+    if (parsed.error) return parsed.error;
+
+    const { reservationId, amount, method, description, cardToken } = parsed.data;
+
+    const ctx = await assertReservationAccess(reservationId);
+
+    if (ctx.error) {
+      return ctx.error;
+    }
+
+    if (!ctx.reservation) {
+      return NextResponse.json(
+        { error: 'Reservation not found' },
+        { status: 404 }
+      );
+    }
+
+    const supabase = ctx.supabase;
+    const reservation = ctx.reservation;
+
+    const balance = Math.max(
+      0,
+      Number(reservation.total_amount) - Number(reservation.paid_amount || 0)
+    );
+
+    if (amount > balance && balance > 0) {
+      return NextResponse.json(
+        { error: 'Amount exceeds reservation balance', balance },
+        { status: 400 }
+      );
+    }
+
+    if (method === 'credit_card' && !cardToken) {
+      return NextResponse.json(
+        { error: 'cardToken is required for credit card payments' },
+        { status: 400 }
+      );
+    }
+
+    const adapter = getPaymentAdapter('omise');
+
     const result = await adapter.charge({
       amount,
-      currency: reservation.hotels.currency || 'THB',
+      currency: reservation.hotels?.currency || 'THB',
       description: description || `Booking ${reservation.reservation_code}`,
       method,
       reservationId,
@@ -55,7 +78,7 @@ export async function POST(request: Request) {
         hotel_id: reservation.hotel_id,
         reservation_id: reservationId,
         amount,
-        currency: reservation.hotels.currency || 'THB',
+        currency: reservation.hotels?.currency || 'THB',
         payment_method: method,
         status: result.status === 'completed' ? 'completed' : 'pending',
         gateway: 'omise',
@@ -66,27 +89,42 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (paymentError) return NextResponse.json({ error: paymentError.message }, { status: 500 });
+    if (paymentError || !payment) {
+      return NextResponse.json(
+        { error: paymentError?.message || 'Failed to create payment' },
+        { status: 500 }
+      );
+    }
 
     if (result.status === 'completed') {
       await supabase
         .from('reservations')
-        .update({ paid_amount: Number(reservation.paid_amount || 0) + amount })
+        .update({
+          paid_amount: Number(reservation.paid_amount || 0) + amount,
+        })
         .eq('id', reservationId)
         .eq('hotel_id', reservation.hotel_id);
     }
 
     await supabase.from('audit_logs').insert({
       hotel_id: reservation.hotel_id,
-      user_id: ctx.user!.id,
+      user_id: ctx.user?.id || null,
       action: 'payment.created',
       entity_type: 'payment',
       entity_id: payment.id,
       changes: { amount, method, status: result.status },
     });
 
-    return NextResponse.json({ success: true, payment, qrCode: result.qrCode, paymentUrl: result.paymentUrl });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({
+      success: true,
+      payment,
+      qrCode: result.qrCode,
+      paymentUrl: result.paymentUrl,
+    });
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : 'Internal Server Error';
+
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
