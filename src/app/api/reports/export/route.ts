@@ -30,10 +30,15 @@ export async function GET(request: Request) {
     r.total_amount, r.paid_amount, Number(r.total_amount) - Number(r.paid_amount), r.source,
   ]);
 
-  const csv = [headers, ...rows].map(row =>
-    row.map((v: string | number | null | undefined) =>
-  `"${String(v ?? '').replace(/"/g, '""')}"`
-    ).join(',');
+  const csv = [headers, ...rows]
+  .map(row =>
+    row
+      .map((v: string | number | null | undefined) =>
+        `"${String(v ?? '').replace(/"/g, '""')}"`
+      )
+      .join(',')
+  )
+  .join('\n');
 
   return new Response('\uFEFF' + csv, {
     headers: {
