@@ -9,6 +9,10 @@ type Hotel = {
   organization_id: string;
 };
 
+type RevenueRow = {
+  amount: number | string | null;
+};
+
 export async function GET(request: Request) {
   try {
     const authHeader = request.headers.get('Authorization');
@@ -20,12 +24,19 @@ export async function GET(request: Request) {
     const admin = createAdminClient();
     const today = new Date().toISOString().split('T')[0];
 
-    const { data: hotels } = await admin
+    const { data: hotels, error: hotelsError } = await admin
       .from('hotels')
       .select('id, name, organization_id');
 
+    if (hotelsError) {
+      return NextResponse.json(
+        { error: hotelsError.message },
+        { status: 500 }
+      );
+    }
+
     const summaries = await Promise.all(
-      (hotels || []).map(async (hotel: Hotel) => {
+      ((hotels || []) as Hotel[]).map(async (hotel: Hotel) => {
         const [
           { count: arrivals },
           { count: departures },
@@ -51,8 +62,13 @@ export async function GET(request: Request) {
             .eq('status', 'completed'),
         ]);
 
-        const totalRevenue =
-          revenue?.reduce((s, p) => s + Number(p.amount), 0) || 0;
+        const revenueRows = (revenue || []) as RevenueRow[];
+
+        const totalRevenue = revenueRows.reduce(
+          (sum: number, payment: RevenueRow) =>
+            sum + Number(payment.amount || 0),
+          0
+        );
 
         return {
           hotelId: hotel.id,
