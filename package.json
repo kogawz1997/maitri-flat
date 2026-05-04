@@ -25,7 +25,6 @@
     "sonner": "^1.7.0",
     "zod": "^3.23.8",
     "lucide-react": "^0.460.0",
-    "plus-jakarta-sans": "^2.0.0"
   },
   "devDependencies": {
     "@types/node": "^22",
