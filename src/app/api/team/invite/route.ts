@@ -42,7 +42,11 @@ export async function POST(request: Request) {
 
   // Check existing Supabase auth user
   const { data: { users } } = await admin.auth.admin.listUsers();
-  const authUser = users.find(u => u.email === email);
+  type AuthUser = {
+  email?: string | null;
+};
+
+const authUser = users.find((u: AuthUser) => u.email === email);
 
   if (authUser) {
     // User exists — add to this org
