@@ -24,7 +24,7 @@
     "recharts": "^2.13.3",
     "sonner": "^1.7.0",
     "zod": "^3.23.8",
-    "lucide-react": "^0.460.0",
+    "lucide-react": "^0.460.0"
   },
   "devDependencies": {
     "@types/node": "^22",
