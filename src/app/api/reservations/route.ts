@@ -33,7 +33,10 @@ export async function POST(request: Request) {
   const body = parsed.data;
 
   const ctx = await requireHotelAccess(body.hotelId, ['owner', 'admin', 'manager', 'front_desk']);
-  if (ctx.error || !ctx.hotelId) return ctx.error;
+  if (ctx.error) return ctx.error;
+  if (!ctx.hotelId) {
+    return NextResponse.json({ error: 'Hotel access denied' }, { status: 403 });
+  }
   const supabase = ctx.supabase;
   const hotelId = ctx.hotelId;
 
@@ -133,7 +136,10 @@ export async function GET(request: Request) {
   const status = searchParams.get('status');
 
   const ctx = await requireHotelAccess(requestedHotelId);
-  if (ctx.error || !ctx.hotelId) return ctx.error;
+  if (ctx.error) return ctx.error;
+  if (!ctx.hotelId) {
+    return NextResponse.json({ error: 'Hotel access denied' }, { status: 403 });
+  }
 
   let query = ctx.supabase
     .from('reservations')

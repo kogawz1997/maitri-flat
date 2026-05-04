@@ -15,7 +15,10 @@ export async function GET(request: Request) {
   if (!reservationId) return NextResponse.json({ error: 'reservationId required' }, { status: 400 });
 
   const ctx = await requireHotelAccess(null);
-  if (ctx.error || !ctx.hotelId) return ctx.error!;
+  if (ctx.error) return ctx.error;
+  if (!ctx.hotelId) {
+    return NextResponse.json({ error: 'Hotel access denied' }, { status: 403 });
+  }
 
   const { data: reservation, error } = await ctx.supabase
     .from('reservations')

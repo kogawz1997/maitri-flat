@@ -21,7 +21,10 @@ export async function POST(request: Request) {
   const { email, role, hotelId } = parsed.data;
 
   const ctx = await requireHotelAccess(hotelId, ['owner', 'admin']);
-  if (ctx.error || !ctx.profile) return ctx.error;
+  if (ctx.error) return ctx.error;
+  if (!ctx.profile) {
+    return NextResponse.json({ error: 'Profile not found' }, { status: 403 });
+  }
 
   const admin = createAdminClient();
 

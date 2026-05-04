@@ -16,7 +16,10 @@ export async function POST(request: Request) {
   const { conversationId } = parsed.data;
 
   const ctx = await requireUser();
-  if (ctx.error || !ctx.profile) return ctx.error;
+  if (ctx.error) return ctx.error;
+  if (!ctx.profile) {
+    return NextResponse.json({ error: 'Profile not found' }, { status: 403 });
+  }
   const supabase = ctx.supabase;
 
   const { data: conversation } = await supabase

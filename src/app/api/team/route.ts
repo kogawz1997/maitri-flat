@@ -12,7 +12,10 @@ const patchSchema = z.object({
 
 export async function GET(request: Request) {
   const ctx = await requireHotelAccess(null, ['owner', 'admin', 'manager']);
-  if (ctx.error || !ctx.profile) return ctx.error;
+  if (ctx.error) return ctx.error;
+  if (!ctx.profile) {
+    return NextResponse.json({ error: 'Profile not found' }, { status: 403 });
+  }
 
   const admin = createAdminClient();
   const { data: members, error } = await admin
@@ -31,7 +34,10 @@ export async function PATCH(request: Request) {
   const { userId, role, active } = parsed.data;
 
   const ctx = await requireHotelAccess(null, ['owner', 'admin']);
-  if (ctx.error || !ctx.profile) return ctx.error;
+  if (ctx.error) return ctx.error;
+  if (!ctx.profile) {
+    return NextResponse.json({ error: 'Profile not found' }, { status: 403 });
+  }
 
   // Cannot demote yourself
   if (userId === ctx.user!.id) {

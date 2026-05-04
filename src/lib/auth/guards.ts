@@ -25,7 +25,15 @@ export async function requireUser() {
 
 export async function requireHotelAccess(hotelId?: string | null, allowedRoles?: AppRole[]) {
   const ctx = await requireUser();
-  if (ctx.error || !ctx.profile) return { ...ctx, hotel: null, hotelId: null };
+  if (ctx.error) return { ...ctx, hotel: null, hotelId: null };
+  if (!ctx.profile) {
+    return {
+      ...ctx,
+      hotel: null,
+      hotelId: null,
+      error: NextResponse.json({ error: 'Profile not found' }, { status: 403 }),
+    };
+  }
 
   if (allowedRoles && !allowedRoles.includes(ctx.profile.role as AppRole)) {
     return { ...ctx, hotel: null, hotelId: null, error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
@@ -48,7 +56,14 @@ export async function requireHotelAccess(hotelId?: string | null, allowedRoles?:
 
 export async function assertReservationAccess(reservationId: string) {
   const ctx = await requireUser();
-  if (ctx.error || !ctx.profile) return { ...ctx, reservation: null };
+  if (ctx.error) return { ...ctx, reservation: null };
+  if (!ctx.profile) {
+    return {
+      ...ctx,
+      reservation: null,
+      error: NextResponse.json({ error: 'Profile not found' }, { status: 403 }),
+    };
+  }
 
   const { data: reservation, error } = await ctx.supabase
     .from('reservations')
