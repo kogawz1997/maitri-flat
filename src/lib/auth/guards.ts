@@ -9,7 +9,33 @@ export type AppRole =
   | 'housekeeping'
   | 'staff';
 
-export async function requireUser() {
+/* =========================
+   TYPES (แก้ TS งอแงทั้งหมด)
+========================= */
+
+type SupabaseClientType = Awaited<ReturnType<typeof createClient>>;
+
+type BaseContext = {
+  supabase: SupabaseClientType;
+  user: any;
+  profile: any;
+  error: Response | null;
+};
+
+type HotelContext = BaseContext & {
+  hotel: any;
+  hotelId: string | null;
+};
+
+type ReservationContext = BaseContext & {
+  reservation: any;
+};
+
+/* =========================
+   REQUIRE USER
+========================= */
+
+export async function requireUser(): Promise<BaseContext> {
   const supabase = await createClient();
 
   const {
@@ -52,39 +78,39 @@ export async function requireUser() {
   };
 }
 
+/* =========================
+   REQUIRE HOTEL ACCESS
+========================= */
+
 export async function requireHotelAccess(
   hotelId?: string | null,
   allowedRoles?: AppRole[]
-) {
+): Promise<HotelContext> {
   const ctx = await requireUser();
 
   if (ctx.error) {
     return {
-      supabase: ctx.supabase,
-      user: ctx.user,
-      profile: ctx.profile,
+      ...ctx,
       hotel: null,
       hotelId: null,
-      error: ctx.error,
     };
   }
 
   if (!ctx.profile) {
     return {
-      supabase: ctx.supabase,
-      user: ctx.user,
-      profile: null,
+      ...ctx,
       hotel: null,
       hotelId: null,
-      error: NextResponse.json({ error: 'Profile not found' }, { status: 403 }),
+      error: NextResponse.json(
+        { error: 'Profile not found' },
+        { status: 403 }
+      ),
     };
   }
 
   if (allowedRoles && !allowedRoles.includes(ctx.profile.role as AppRole)) {
     return {
-      supabase: ctx.supabase,
-      user: ctx.user,
-      profile: ctx.profile,
+      ...ctx,
       hotel: null,
       hotelId: null,
       error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
@@ -106,9 +132,7 @@ export async function requireHotelAccess(
 
   if (error || !hotel) {
     return {
-      supabase: ctx.supabase,
-      user: ctx.user,
-      profile: ctx.profile,
+      ...ctx,
       hotel: null,
       hotelId: null,
       error: NextResponse.json(
@@ -119,35 +143,37 @@ export async function requireHotelAccess(
   }
 
   return {
-    supabase: ctx.supabase,
-    user: ctx.user,
-    profile: ctx.profile,
+    ...ctx,
     hotel,
     hotelId: hotel.id,
     error: null,
   };
 }
 
-export async function assertReservationAccess(reservationId: string) {
+/* =========================
+   ASSERT RESERVATION ACCESS
+========================= */
+
+export async function assertReservationAccess(
+  reservationId: string
+): Promise<ReservationContext> {
   const ctx = await requireUser();
 
   if (ctx.error) {
     return {
-      supabase: ctx.supabase,
-      user: ctx.user,
-      profile: ctx.profile,
+      ...ctx,
       reservation: null,
-      error: ctx.error,
     };
   }
 
   if (!ctx.profile) {
     return {
-      supabase: ctx.supabase,
-      user: ctx.user,
-      profile: null,
+      ...ctx,
       reservation: null,
-      error: NextResponse.json({ error: 'Profile not found' }, { status: 403 }),
+      error: NextResponse.json(
+        { error: 'Profile not found' },
+        { status: 403 }
+      ),
     };
   }
 
@@ -165,9 +191,7 @@ export async function assertReservationAccess(reservationId: string) {
     reservation.hotels?.organization_id !== ctx.profile.organization_id
   ) {
     return {
-      supabase: ctx.supabase,
-      user: ctx.user,
-      profile: ctx.profile,
+      ...ctx,
       reservation: null,
       error: NextResponse.json(
         { error: 'Reservation not found' },
@@ -177,9 +201,7 @@ export async function assertReservationAccess(reservationId: string) {
   }
 
   return {
-    supabase: ctx.supabase,
-    user: ctx.user,
-    profile: ctx.profile,
+    ...ctx,
     reservation,
     error: null,
   };
