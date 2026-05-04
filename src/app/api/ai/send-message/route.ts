@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { translateText, detectLanguage, type Language } from '@/lib/ai';
-import { getChannel } from '@/lib/channels';
 import { parseJson } from '@/lib/http/validation';
 import { requireUser } from '@/lib/auth/guards';
 import { rateLimit } from '@/lib/security/rate-limit';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const schema = z.object({
   conversationId: z.string().uuid(),
@@ -18,22 +20,29 @@ export async function POST(request: Request) {
 
   const parsed = await parseJson(request, schema);
   if (parsed.error) return parsed.error;
+
   const { conversationId, text, fromAISuggestion } = parsed.data;
 
   const ctx = await requireUser();
   if (ctx.error) return ctx.error;
+
   if (!ctx.profile) {
     return NextResponse.json({ error: 'Profile not found' }, { status: 403 });
   }
+
   const supabase = ctx.supabase;
 
-  const { data: conversation } = await supabase
+  const { data: conversation, error: conversationError } = await supabase
     .from('conversations')
     .select('*, hotels(organization_id)')
     .eq('id', conversationId)
     .single();
 
-  if (!conversation || conversation.hotels?.organization_id !== ctx.profile.organization_id) {
+  if (conversationError || !conversation) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  if (conversation.hotels?.organization_id !== ctx.profile.organization_id) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
@@ -41,16 +50,31 @@ export async function POST(request: Request) {
   const sourceLang = detectLanguage(text) as Language;
 
   let translatedText = text;
+
   if (sourceLang !== guestLang) {
-    const result = await translateText({ text, fromLang: sourceLang, toLang: guestLang, context: 'staff_reply' });
+    const result = await translateText({
+      text,
+      fromLang: sourceLang,
+      toLang: guestLang,
+      context: 'staff_reply',
+    });
+
     translatedText = result.translated;
   }
 
   let channelMessageId = '';
   let status = 'sent';
+
   try {
+    const { getChannel } = await import('@/lib/channels');
+
     const adapter = getChannel(conversation.channel);
-    const result = await adapter.sendMessage({ channelUserId: conversation.channel_user_id, text: translatedText });
+
+    const result = await adapter.sendMessage({
+      channelUserId: conversation.channel_user_id,
+      text: translatedText,
+    });
+
     channelMessageId = result.messageId;
     status = result.status;
   } catch (e) {
@@ -77,6 +101,12 @@ export async function POST(request: Request) {
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ success: true, message });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    success: true,
+    message,
+  });
 }
